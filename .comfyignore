@@ -1,0 +1,9 @@
+.git/
+.github/
+.reference/
+dist/
+tests/
+tools/
+__pycache__/
+*.pyc
+.DS_Store

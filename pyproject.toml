@@ -1,0 +1,17 @@
+[project]
+name = "comfyui-zimage-two-character-composer"
+version = "0.2.0"
+description = "Two Z-Image Turbo characters with independent regional LoRAs, prompts, free boxes and masks in one ComfyUI node."
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+readme = "README.md"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/cyberdeliaAI/comfyui-zimage-two-character-composer"
+"Bug Tracker" = "https://github.com/cyberdeliaAI/comfyui-zimage-two-character-composer/issues"
+
+[tool.comfy]
+PublisherId = "cyberdelia"
+DisplayName = "Z-Image Turbo Two Character Composer"
+Icon = "https://raw.githubusercontent.com/cyberdeliaAI/comfyui-zimage-two-character-composer/main/assets/icon.png"
