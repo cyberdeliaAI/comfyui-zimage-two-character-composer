@@ -2,6 +2,8 @@ import importlib.util
 import json
 import math
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import types
 import unittest
@@ -177,6 +179,29 @@ class ComposerTests(unittest.TestCase):
             schema = composer.ZImageTwoCharacterComposer.INPUT_TYPES()["required"]
         self.assertEqual(schema["character_1_lora"][0], ["None"])
         self.assertEqual(set(package.NODE_CLASS_MAPPINGS), {"ZImageTwoCharacterComposer"})
+
+    def test_frontend_widget_order_matches_input_types(self):
+        # composer.js restores saved values by position, so its list must be the node's own
+        # widget order: required inputs first, then optional ones, skipping sockets.
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node.js is needed to read web/composer.js")
+        script = ("const vm = require('node:vm'), fs = require('node:fs');"
+                  "const c = vm.createContext({ app: { registerExtension() {} } });"
+                  "vm.runInContext(fs.readFileSync(process.argv[1], 'utf8').replace(/^import .*;\\n/, ''), c);"
+                  "console.log(JSON.stringify(vm.runInContext('CURRENT_ORDER', c)));")
+        output = subprocess.run([node, "-e", script, str(ROOT / "web" / "composer.js")],
+                                capture_output=True, text=True, check=True).stdout
+        paths = types.SimpleNamespace(get_filename_list=lambda _: ["a.safetensors"])
+        with patch.dict(sys.modules, {"folder_paths": paths}):
+            inputs = composer.ZImageTwoCharacterComposer.INPUT_TYPES()
+        widgets = []
+        for section in ("required", "optional"):
+            for name, spec in inputs[section].items():
+                kind, options = spec[0], (spec[1] if len(spec) > 1 else {})
+                if not options.get("forceInput") and (isinstance(kind, list) or kind in ("STRING", "INT", "FLOAT", "BOOLEAN")):
+                    widgets.append(name)
+        self.assertEqual(json.loads(output), widgets)
 
     def test_free_boxes_add_background_without_character_hooks(self):
         _, positive, _, masks, negative, report = self.compose(direction='Free boxes')

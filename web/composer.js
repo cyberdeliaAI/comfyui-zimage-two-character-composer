@@ -9,26 +9,32 @@ const FIELDS = [
     ["lora", "LoRA"],
     ["strength", "LoRA strength"],
 ];
-// Widget order of 0.1.x / 0.2.x, used to migrate saved workflows.
-const LEGACY_ORDER = [
+// The node's own widget order: INPUT_TYPES in composer.py, required inputs first and
+// then the optional ones. It has not changed since 0.1; new fields were appended.
+// Positional saved values and the frontend both follow it, so a test compares this
+// list with the node definition. Do not copy the Krea2 order here: that node lists
+// its widgets differently.
+const CURRENT_ORDER = [
     "direction", "character_1_percent", "base_prompt",
     "character_1_prompt", "character_1_lora", "character_1_strength",
     "character_2_prompt", "character_2_lora", "character_2_strength",
-    "separation",
+    "separation", "negative_prompt", "character_1_trigger", "character_2_trigger",
+    "boxes", "edge_softness", "preview_ratio",
 ];
-const CHARACTER_ORDER = [1, 2].flatMap((number) =>
-    ["trigger", "prompt", "lora", "strength"].map((suffix) => `character_${number}_${suffix}`));
-const PREVIOUS_ORDER = [
-    "direction", "character_1_percent", "base_prompt", "negative_prompt",
-    ...CHARACTER_ORDER, "separation", "boxes", "edge_softness", "preview_ratio",
-];
-const CURRENT_ORDER = [
-    "base_prompt", "negative_prompt", ...CHARACTER_ORDER,
+// The 0.1 prototype saved only the first ten of them.
+const LEGACY_ORDER = CURRENT_ORDER.slice(0, 10);
+// The 0.2.0 beta example workflows listed their values in the Krea2 order instead
+// (base prompt first). Such files are still restored correctly.
+const EXAMPLE_ORDER = [
+    "base_prompt", "negative_prompt",
+    "character_1_trigger", "character_1_prompt", "character_1_lora", "character_1_strength",
+    "character_2_trigger", "character_2_prompt", "character_2_lora", "character_2_strength",
     "direction", "character_1_percent", "separation", "boxes", "edge_softness", "preview_ratio",
 ];
+const DIRECTIONS = ["Left / Right", "Top / Bottom", FREE];
 const LAYOUT_PROPERTY = "zimage_composer_widget_layout";
 const NEGATIVE_HEIGHT = 64;
-// Fields added after 0.3 and their defaults.
+// Fields added after 0.1 and their defaults.
 const ADDED = { boxes: DEFAULT_BOXES, edge_softness: 0, preview_ratio: "Auto" };
 const COLORS = ["#224e70", "#684378"];
 const HANDLE = 9;
@@ -326,7 +332,7 @@ function swapCharacters(node) {
     updateLabels(node);
 }
 
-function migrateSavedValues(node, saved, layout, named) {
+function migrateSavedValues(node, saved, named) {
     // Modern ComfyUI saves values by name as well as position. Names survive
     // layout changes and take priority over a stale positional array.
     if (named && typeof named === "object" && !Array.isArray(named)
@@ -346,13 +352,13 @@ function migrateSavedValues(node, saved, layout, named) {
         return "named";
     }
     if (!Array.isArray(saved)) return "none";
-    // 0.4.3 moves Direction/share after the characters. The layout marker
-    // survives save/load and also disambiguates connected controls saved as
-    // null. Unmarked pre-0.4.3 workflows use their original positional order.
-    const current = layout === 2 || (saved.length >= 13 && typeof saved[1] === "string");
-    const legacy = !current && saved.length >= LEGACY_ORDER.length && saved.length < 13;
-    const order = current ? CURRENT_ORDER : legacy ? LEGACY_ORDER : PREVIOUS_ORDER;
-    const kind = current ? "current" : legacy ? "0.2" : "0.3/0.4";
+    // Positional values normally follow the node's own order. In that order the first
+    // value is the Direction (or null when it is connected), so a text in the first slot
+    // and another text in the second marks the older example files.
+    const example = saved.length >= 13 && !DIRECTIONS.includes(saved[0]) && typeof saved[1] === "string";
+    const legacy = !example && saved.length >= LEGACY_ORDER.length && saved.length < 13;
+    const order = example ? EXAMPLE_ORDER : legacy ? LEGACY_ORDER : CURRENT_ORDER;
+    const kind = example ? "0.2 example" : legacy ? "0.1" : "current";
     for (const [index, name] of order.entries()) {
         const item = widget(node, name);
         if (item && index < saved.length) item.value = saved[index];
@@ -578,7 +584,7 @@ app.registerExtension({
         const configured = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function (info) {
             const result = configured?.apply(this, arguments);
-            migrateSavedValues(this, info?.widgets_values, info?.properties?.[LAYOUT_PROPERTY], info?.widgets_values_named);
+            migrateSavedValues(this, info?.widgets_values, info?.widgets_values_named);
             restoreEmptyBoxes(this);
             this.properties ??= {};
             this.properties[LAYOUT_PROPERTY] = 2;

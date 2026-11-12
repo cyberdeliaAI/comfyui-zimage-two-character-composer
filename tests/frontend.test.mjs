@@ -6,13 +6,29 @@ import vm from "node:vm";
 const source = readFileSync(new URL("../web/composer.js", import.meta.url), "utf8")
     .replace(/^import .*;\n/, "");
 
+// The node's widgets in the order of INPUT_TYPES (composer.py), which is also the order
+// in which the frontend creates, saves and restores them. tests/test_composer.py checks
+// that composer.js lists the same order; do not borrow the Krea2 order here.
 const NAMES = [
+    "direction", "character_1_percent", "base_prompt",
+    "character_1_prompt", "character_1_lora", "character_1_strength",
+    "character_2_prompt", "character_2_lora", "character_2_strength",
+    "separation", "negative_prompt", "character_1_trigger", "character_2_trigger",
+    "boxes", "edge_softness", "preview_ratio",
+];
+
+// The order the 0.2.0 beta example workflows listed their positional values in.
+const EXAMPLE_NAMES = [
     "base_prompt", "negative_prompt",
     ...[1, 2].flatMap((i) => ["trigger", "prompt", "lora", "strength"].map((s) => `character_${i}_${s}`)),
     "direction", "character_1_percent", "separation", "boxes", "edge_softness", "preview_ratio",
 ];
 
-const PREVIOUS_NAMES = ["direction", "character_1_percent", ...NAMES.slice(0, 10), ...NAMES.slice(12)];
+function scriptConstant(name) {
+    const context = vm.createContext({ app: { registerExtension() {} } });
+    vm.runInContext(source, context);
+    return JSON.parse(JSON.stringify(vm.runInContext(name, context)));
+}
 
 function fixture() {
     let extension;
@@ -253,10 +269,10 @@ test("unknown calculated dimensions and cycles have an explicitly marked square 
 test("positional workflows reset the new ratio after a positional visual-widget null", () => {
     const { node, get } = fixture();
     get("preview_ratio").value = null;
-    const saved = PREVIOUS_NAMES.slice(0, 16).map((n) => get(n).value);
+    const saved = NAMES.map((n) => get(n).value);
     node.onConfigure({ widgets_values: [...saved, null] });
     assert.equal(get("preview_ratio").value, "Auto");
-    assert.equal(get("boxes").value, saved[13]);
+    assert.equal(get("boxes").value, saved[NAMES.indexOf("boxes")]);
 });
 
 test("portrait free-box drag keeps the last movement on Nodes 2.0 release", () => {
@@ -297,31 +313,28 @@ test("disconnecting and removing a composer unsubscribe from source callbacks", 
 });
 
 
-test("layout starts with prompts and places Direction/share below both characters", () => {
+test("composer.js lists the widgets in the same order as the node fixture", () => {
     const { node } = fixture();
-    const order = node.widgets.map((w) => w.name);
-    assert.deepEqual(order.slice(0, 2), ["base_prompt", "negative_prompt"]);
-    assert.ok(order.indexOf("direction") > order.indexOf("character_2_strength"));
-    assert.equal(order.indexOf("character_1_percent"), order.indexOf("direction") + 1);
-    assert.equal(order.indexOf("separation"), order.indexOf("character_1_percent") + 1);
+    // tests/test_composer.py ties this list to INPUT_TYPES; the fixture follows it too.
+    assert.deepEqual(scriptConstant("CURRENT_ORDER"), NAMES);
+    assert.deepEqual(node.widgets.slice(0, NAMES.length).map((w) => w.name), NAMES);
     assert.equal(node.properties.zimage_composer_widget_layout, 2);
 });
 
-test("extended saved fields are restored by their original names after positional loading", () => {
-    for (const count of [13, 15, 16]) {
+test("values saved in the node's own order are restored by name, with or without named values", () => {
+    const values = { direction: "Top / Bottom", character_1_percent: 73,
+        base_prompt: "scene", negative_prompt: "blurry", character_1_trigger: "a",
+        character_1_prompt: "knight", character_1_lora: "a.safetensors", character_1_strength: .8,
+        character_2_trigger: "b", character_2_prompt: "wizard", character_2_lora: "b.safetensors",
+        character_2_strength: 1.2, separation: "Strong", boxes: "0, 0, 40, 100; 60, 0, 40, 100",
+        edge_softness: 32, preview_ratio: "4:5" };
+    // Frontends that do not write widgets_values_named only provide the positional array.
+    for (const info of [{}, { properties: { zimage_composer_widget_layout: 2 } }]) {
         const { node, get } = fixture();
-        const values = { direction: "Top / Bottom", character_1_percent: 73,
-            base_prompt: "scene", negative_prompt: "blurry", character_1_trigger: "a",
-            character_1_prompt: "knight", character_1_lora: "a.safetensors", character_1_strength: .8,
-            character_2_trigger: "b", character_2_prompt: "wizard", character_2_lora: "b.safetensors",
-            character_2_strength: 1.2, separation: "Strong", boxes: "0, 0, 40, 100; 60, 0, 40, 100",
-            edge_softness: 32, preview_ratio: "4:5" };
-        const saved = [...PREVIOUS_NAMES.slice(0, count).map((n) => values[n]), null, null];
+        const saved = [...NAMES.map((n) => values[n]), null, null];
         saved.forEach((value, i) => { if (node.widgets[i]) node.widgets[i].value = value; });
-        node.onConfigure({ widgets_values: saved, properties: {} });
-        for (const name of PREVIOUS_NAMES.slice(0, count)) assert.equal(get(name).value, values[name], name);
-        assert.equal(node.properties.zimage_composer_widget_layout, 2);
-        if (count < 16) assert.equal(get("preview_ratio").value, "Auto");
+        node.onConfigure({ widgets_values: saved, ...info });
+        for (const name of NAMES) assert.equal(get(name).value, values[name], name);
     }
 });
 
@@ -340,8 +353,8 @@ test("reordered workflow round trip preserves prompts, LoRAs and linked field pl
     info.widgets_values.forEach((value, i) => { second.node.widgets[i].value = value; });
     second.node.onConfigure(info);
     for (const name of NAMES) assert.equal(second.get(name).value, first.get(name).value, name);
-    // A connected negative has no literal saved value; the marker must still
-    // distinguish this layout from the old one with Direction at the top.
+    // A connected share control has no literal saved value; the Direction in the
+    // first slot still identifies the node's own order.
     info.widgets_values[1] = null;
     const third = fixture();
     third.node.onConfigure(info);
@@ -349,17 +362,30 @@ test("reordered workflow round trip preserves prompts, LoRAs and linked field pl
     assert.equal(third.get("direction").value, "Free boxes");
 });
 
-test("old workflows with connected split controls still use the previous order", () => {
+test("0.2.0 beta example workflows (Krea2 order) are still restored by name", () => {
     const { node, get } = fixture();
-    const saved = PREVIOUS_NAMES.map((n) => get(n).value);
-    saved[0] = null;
-    saved[1] = null;
-    saved[2] = "a garden";
-    saved[3] = "blurry";
-    node.onConfigure({ widgets_values: saved });
+    const saved = EXAMPLE_NAMES.map((n) => get(n).value);
+    const put = (name, value) => { saved[EXAMPLE_NAMES.indexOf(name)] = value; };
+    put("base_prompt", "a garden");
+    put("negative_prompt", "blurry");
+    put("direction", "Top / Bottom");
+    put("character_1_percent", null);   // a connected control
+    // Without named values the frontend first restores by position, into the wrong widgets.
+    saved.forEach((value, i) => { node.widgets[i].value = value; });
+    node.onConfigure({ widgets_values: saved, properties: { zimage_composer_widget_layout: 2 } });
     assert.equal(get("base_prompt").value, "a garden");
     assert.equal(get("negative_prompt").value, "blurry");
+    assert.equal(get("direction").value, "Top / Bottom");
     assert.equal(get("character_1_percent").value, null);
+});
+
+test("the shipped example workflows list their values in the node's own order", () => {
+    for (const file of ["two_characters", "toggle_composer"]) {
+        const flow = JSON.parse(readFileSync(new URL(`../example_workflows/${file}.json`, import.meta.url), "utf8"));
+        const composer = flow.nodes.find((n) => n.type === "ZImageTwoCharacterComposer");
+        assert.deepEqual(Object.keys(composer.widgets_values_named), NAMES, file);
+        assert.deepEqual(composer.widgets_values, NAMES.map((n) => composer.widgets_values_named[n]), file);
+    }
 });
 
 test("negative textarea remains multiline at a fixed compact height in both layouts", () => {
@@ -444,8 +470,8 @@ test("named saved values override stale positional values after a layout change"
     const named = Object.fromEntries(NAMES.map((n) => [n, get(n).value]));
     Object.assign(named, { boxes: "10, 5, 30, 90; 50, 20, 40, 60", direction: "Free boxes",
         base_prompt: "a garden", negative_prompt: "text", character_1_prompt: "a knight", character_1_lora: "a.safetensors" });
-    const stale = PREVIOUS_NAMES.map((n) => named[n]);
-    stale[13] = "";
+    const stale = EXAMPLE_NAMES.map((n) => named[n]);
+    stale[EXAMPLE_NAMES.indexOf("boxes")] = "";
     node.onConfigure({ widgets_values: stale, widgets_values_named: named });
     for (const name of NAMES) assert.equal(get(name).value, named[name], name);
     const { labels } = render(node);
@@ -456,7 +482,7 @@ test("named saved values override stale positional values after a layout change"
 test("older named workflows lacking boxes receive defaults instead of positional leftovers", () => {
     const { node, get } = fixture();
     get("boxes").value = "";
-    const named = Object.fromEntries(PREVIOUS_NAMES.slice(0, 13).map((n) => [n, get(n).value]));
+    const named = Object.fromEntries(NAMES.slice(0, NAMES.indexOf("boxes")).map((n) => [n, get(n).value]));
     named.direction = "Free boxes";
     node.onConfigure({ widgets_values_named: named });
     assert.equal(get("boxes").value, "5, 10, 42, 85; 53, 10, 42, 85");

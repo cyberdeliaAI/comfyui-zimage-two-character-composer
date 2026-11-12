@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Saved workflows that only carry positional values (frontends that do not write
+  `widgets_values_named`) restored most fields into the wrong widgets. The frontend script
+  used the Krea2 widget order, not this node's. It now follows the node definition, and a
+  test compares the two. The 0.2.0 example workflows list their values in the node's own
+  order, and older copies of them are still restored correctly.
+
 ## 0.2.0 — first public beta
 
 - Standalone native masked conditioning and independent character LoRA hooks.
