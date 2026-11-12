@@ -160,7 +160,8 @@ class ComposerTests(unittest.TestCase):
         for shape in ((1, 4, 12, 16), (1, 16, 1, 12, 16), (1, 16, 11, 16)):
             with self.subTest(shape=shape), self.assertRaises(ValueError):
                 self.compose(latent={"samples": torch.zeros(shape)})
-        bad = Model(); bad.model.model_config.unet_config={"image_model": "krea2"}
+        bad = Model()
+        bad.model.model_config.unet_config={"image_model": "krea2"}
         with self.assertRaisesRegex(ValueError, "native latent-space Z-Image"):
             self.compose(model=bad)
         with self.assertRaises(ValueError): self.compose(character_1_prompt=" ")
@@ -249,9 +250,12 @@ class ComposerTests(unittest.TestCase):
         w=json.loads((ROOT / "example_workflows/two_characters.json").read_text())
         nodes={n["id"]:n for n in w["nodes"]}
         for id,src,slot,dst,inslot,kind in w["links"]:
-            output=nodes[src]["outputs"][slot]; input=nodes[dst]["inputs"][inslot]
-            self.assertIn(id,output["links"]); self.assertEqual(input["link"],id)
-            self.assertEqual(input["type"],kind); self.assertEqual(output["type"],kind)
+            output=nodes[src]["outputs"][slot]
+            input=nodes[dst]["inputs"][inslot]
+            self.assertIn(id,output["links"])
+            self.assertEqual(input["link"],id)
+            self.assertEqual(input["type"],kind)
+            self.assertEqual(output["type"],kind)
         self.assertFalse(any("Krea" in n["type"] for n in nodes.values()))
         self.assertEqual(next(n for n in nodes.values() if n["type"]=="CLIPLoader")["widgets_values"][1], "lumina2")
 

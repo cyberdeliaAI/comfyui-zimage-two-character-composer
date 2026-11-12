@@ -25,7 +25,8 @@ def extract_functions(path, names, scope):
     tree.body = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
     assert {node.name for node in tree.body} == set(names)
     tree.body.insert(0, ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0))
-    exec(compile(ast.fix_missing_locations(tree), path, "exec"), scope)
+    # Only the named function definitions of the pinned, official ComfyUI source are run.
+    exec(compile(ast.fix_missing_locations(tree), path, "exec"), scope)  # noqa: S102
 
 
 def main(hooks_path, samplers_path, helpers_path):
