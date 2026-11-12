@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-zimage-two-character-composer"
-version = "0.2.0"
+version = "0.2.1"
 description = "Two Z-Image Turbo characters with independent regional LoRAs, prompts, free boxes and masks in one ComfyUI node."
 requires-python = ">=3.10"
 license = { file = "LICENSE" }

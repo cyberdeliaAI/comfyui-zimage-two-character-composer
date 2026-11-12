@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 — beta
 
 ### Fixed
 - Saved workflows that only carry positional values (frontends that do not write

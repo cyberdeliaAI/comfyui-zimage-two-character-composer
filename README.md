@@ -11,7 +11,7 @@ One ComfyUI node for **two Z-Image Turbo characters, each with its own prompt an
 Choose left/right, top/bottom, freely positioned boxes or connected masks.
 This is a standalone extension: the Krea2 Composer is not required.
 
-**First public beta, 0.2.0.** CPU tensor tests and the real ComfyUI hook/sampler loop
+**Public beta, 0.2.1.** CPU tensor tests and the real ComfyUI hook/sampler loop
 are checked. Full Z-Image GPU generation and the interface in a running ComfyUI
 installation still need validation with real checkpoints and character LoRAs.
 
